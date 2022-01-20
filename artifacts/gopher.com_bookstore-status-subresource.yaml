@@ -35,7 +35,7 @@ spec:
             spec:
               description: BookstoreSpec defines the desired state of BookstoreCRD
               properties:
-                hostPort:
+                containerPort:
                   format: int32
                   type: integer
                 name:
@@ -44,7 +44,7 @@ spec:
                   format: int32
                   type: integer
               required:
-                - hostPort
+                - containerPort
                 - name
                 - replicaCount
               type: object

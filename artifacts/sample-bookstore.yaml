@@ -5,4 +5,4 @@ metadata:
 spec:
   name: bookstore
   replicaCount: 5
-  hostPort: 8080
+  containerPort: 8081

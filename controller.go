@@ -368,9 +368,9 @@ func newService(bookstore *samplev1alpha1.Bookstore) *corev1.Service {
 			Selector: labels,
 			Ports: []corev1.ServicePort{
 				corev1.ServicePort{
-					Port:       8081,                 // bookstore.Spec.HostPort,
-					TargetPort: intstr.FromInt(8081), //intstr.FromInt(int(bookstore.Spec.HostPort)),
-					NodePort:   30007,
+					Port:       bookstore.Spec.ContainerPort,
+					TargetPort: intstr.FromInt(int(bookstore.Spec.ContainerPort)),
+					NodePort:   30000,
 				},
 			},
 		},

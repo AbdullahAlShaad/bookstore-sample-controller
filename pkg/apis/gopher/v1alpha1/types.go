@@ -22,9 +22,9 @@ import (
 
 // BookstoreSpec defines the desired state of BookstoreCRD
 type BookstoreSpec struct {
-	Name         string `json:"name"`
-	ReplicaCount *int32 `json:"replicaCount"`
-	HostPort     int32  `json:"hostPort"`
+	Name          string `json:"name"`
+	ReplicaCount  *int32 `json:"replicaCount"`
+	ContainerPort int32  `json:"containerPort"`
 }
 
 // BookstoreStatus defines the observed state of BookstoreCRD
