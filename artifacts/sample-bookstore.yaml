@@ -1,7 +1,7 @@
 apiVersion: gopher.com/v1alpha1
 kind: Bookstore
 metadata:
-  name: bookstorecrd-sample
+  name: bookstore-sample
 spec:
   deploymentName: bookstore-deployment
   replicaCount: 5

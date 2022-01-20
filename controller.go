@@ -34,7 +34,7 @@ const (
 	SuccessSynced         = "Synced"
 	ErrResourceExists     = "ErrResourceExists"
 	MessageResourceExists = "Resource %q already exists and is not managed by Foo"
-	MessageResourceSynced = "Foo synced successfully"
+	MessageResourceSynced = "Bookstore synced successfully"
 )
 
 type Controller struct {
@@ -220,6 +220,7 @@ func (c *Controller) syncHandler(key string) error {
 }
 
 func (c *Controller) handleObject(obj interface{}) {
+
 	var object metav1.Object
 	var ok bool
 	if object, ok = obj.(metav1.Object); !ok {
