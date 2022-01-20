@@ -45,6 +45,7 @@ func main() {
 
 	controller := NewController(kubeClient, exampleClient,
 		kubeInformerFactory.Apps().V1().Deployments(),
+		kubeInformerFactory.Core().V1().Services(),
 		exampleInformerFactory.Gopher().V1alpha1().Bookstores())
 
 	kubeInformerFactory.Start(stopCh)

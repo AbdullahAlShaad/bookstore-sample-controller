@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog/v2"
 	"time"
 
@@ -19,10 +20,12 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	appsinformers "k8s.io/client-go/informers/apps/v1"
+	corev1informers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	appslisters "k8s.io/client-go/listers/apps/v1"
+	corev1lister "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
@@ -33,7 +36,7 @@ const controllerAgentName = "bookstore-controller"
 const (
 	SuccessSynced         = "Synced"
 	ErrResourceExists     = "ErrResourceExists"
-	MessageResourceExists = "Resource %q already exists and is not managed by Foo"
+	MessageResourceExists = "Resource %q already exists and is not managed by Bookstore"
 	MessageResourceSynced = "Bookstore synced successfully"
 )
 
@@ -45,8 +48,12 @@ type Controller struct {
 
 	deploymentsLister appslisters.DeploymentLister
 	deploymentsSynced cache.InformerSynced
-	bookstoreLister   listers.BookstoreLister
-	bookstoreSynced   cache.InformerSynced
+
+	serviceLister corev1lister.ServiceLister
+	serviceSynced cache.InformerSynced
+
+	bookstoreLister listers.BookstoreLister
+	bookstoreSynced cache.InformerSynced
 
 	workqueue workqueue.RateLimitingInterface
 
@@ -57,6 +64,7 @@ func NewController(
 	kubeclientset kubernetes.Interface,
 	sampleclientset clientset.Interface,
 	deploymentInformer appsinformers.DeploymentInformer,
+	serviceInformer corev1informers.ServiceInformer,
 	bookstoreInformer informers.BookstoreInformer) *Controller {
 
 	utilruntime.Must(samplescheme.AddToScheme(scheme.Scheme))
@@ -71,6 +79,8 @@ func NewController(
 		sampleclientset:   sampleclientset,
 		deploymentsLister: deploymentInformer.Lister(),
 		deploymentsSynced: deploymentInformer.Informer().HasSynced,
+		serviceLister:     serviceInformer.Lister(),
+		serviceSynced:     serviceInformer.Informer().HasSynced,
 		bookstoreLister:   bookstoreInformer.Lister(),
 		bookstoreSynced:   bookstoreInformer.Informer().HasSynced,
 		workqueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Foos"),
@@ -93,6 +103,19 @@ func NewController(
 			oldDepl := old.(*appsv1.Deployment)
 			if newDepl.ResourceVersion == oldDepl.ResourceVersion {
 
+				return
+			}
+			controller.handleObject(new)
+		},
+		DeleteFunc: controller.handleObject,
+	})
+
+	serviceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: controller.handleObject,
+		UpdateFunc: func(old, new interface{}) {
+			oldSvc := old.(*corev1.Service)
+			newSvc := new.(*corev1.Service)
+			if oldSvc.ResourceVersion == newSvc.ResourceVersion {
 				return
 			}
 			controller.handleObject(new)
@@ -181,36 +204,55 @@ func (c *Controller) syncHandler(key string) error {
 		}
 		return err
 	}
-	deploymentName := bookstore.Spec.Name
-	if deploymentName == "" {
-		utilruntime.HandleError(fmt.Errorf("Deployment name is not specified for %s", key))
+
+	if bookstore.Spec.Name == "" {
+		utilruntime.HandleError(fmt.Errorf("Name is not specified for %s", key))
 		return nil
 	}
-	deployement, err := c.deploymentsLister.Deployments(bookstore.Namespace).Get(deploymentName)
+
+	deploymentName := bookstore.Spec.Name + "-deployment"
+	deployment, err := c.deploymentsLister.Deployments(bookstore.Namespace).Get(deploymentName)
 
 	if errors.IsNotFound(err) {
-		deployement, err = c.kubeclientset.AppsV1().Deployments(bookstore.Namespace).Create(context.TODO(), newDeployment(bookstore), metav1.CreateOptions{})
+		deployment, err = c.kubeclientset.AppsV1().Deployments(bookstore.Namespace).Create(context.TODO(), newDeployment(bookstore), metav1.CreateOptions{})
 	}
 	if err != nil {
 		return err
 	}
 
-	if !metav1.IsControlledBy(deployement, bookstore) {
-		msg := fmt.Sprintf(MessageResourceExists, deployement.Name)
+	if !metav1.IsControlledBy(deployment, bookstore) {
+		msg := fmt.Sprintf(MessageResourceExists, deploymentName)
 		c.recorder.Event(bookstore, corev1.EventTypeWarning, ErrResourceExists, msg)
 		return fmt.Errorf("%s", msg)
 	}
 
-	if bookstore.Spec.ReplicaCount != nil && *bookstore.Spec.ReplicaCount != *deployement.Spec.Replicas {
-		klog.V(4).Infof("name : %s , Bookstore replicas : %d, deployment replicas : %d", name, *bookstore.Spec.ReplicaCount, *deployement.Spec.Replicas)
-		deployement, err = c.kubeclientset.AppsV1().Deployments(bookstore.Namespace).Update(context.TODO(), newDeployment(bookstore), metav1.UpdateOptions{})
+	if bookstore.Spec.ReplicaCount != nil && *bookstore.Spec.ReplicaCount != *deployment.Spec.Replicas {
+		klog.V(4).Infof("name : %s , Bookstore replicas : %d, deployment replicas : %d", name, *bookstore.Spec.ReplicaCount, *deployment.Spec.Replicas)
+		deployment, err = c.kubeclientset.AppsV1().Deployments(bookstore.Namespace).Update(context.TODO(), newDeployment(bookstore), metav1.UpdateOptions{})
 	}
 
 	if err != nil {
 		return err
 	}
 
-	err = c.updateBookstoreStatus(bookstore, deployement)
+	serviceName := bookstore.Spec.Name + "-service"
+	service, err := c.serviceLister.Services(bookstore.Namespace).Get(serviceName)
+
+	if errors.IsNotFound(err) {
+		service, err = c.kubeclientset.CoreV1().Services(bookstore.Namespace).Create(context.TODO(), newService(bookstore), metav1.CreateOptions{})
+	}
+
+	if !metav1.IsControlledBy(service, bookstore) {
+		msg := fmt.Sprintf(MessageResourceExists, deploymentName)
+		c.recorder.Event(bookstore, corev1.EventTypeWarning, ErrResourceExists, msg)
+		return fmt.Errorf("%s", msg)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	err = c.updateBookstoreStatus(bookstore, deployment)
 	if err != nil {
 		return err
 	}
@@ -277,7 +319,7 @@ func newDeployment(bookstore *samplev1alpha1.Bookstore) *appsv1.Deployment {
 	}
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      bookstore.Spec.Name,
+			Name:      bookstore.Spec.Name + "-deployment",
 			Namespace: bookstore.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(bookstore, samplev1alpha1.SchemeGroupVersion.WithKind("Bookstore")),
@@ -303,4 +345,35 @@ func newDeployment(bookstore *samplev1alpha1.Bookstore) *appsv1.Deployment {
 			},
 		},
 	}
+}
+
+func newService(bookstore *samplev1alpha1.Bookstore) *corev1.Service {
+	labels := map[string]string{
+		"app":        "bookstore-api-server",
+		"controller": bookstore.Name,
+	}
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Service",
+			APIVersion: "k8s.io/api/core/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: bookstore.Spec.Name + "-service",
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(bookstore, samplev1alpha1.SchemeGroupVersion.WithKind("Bookstore")),
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Type:     corev1.ServiceTypeNodePort,
+			Selector: labels,
+			Ports: []corev1.ServicePort{
+				corev1.ServicePort{
+					Port:       8081,                 // bookstore.Spec.HostPort,
+					TargetPort: intstr.FromInt(8081), //intstr.FromInt(int(bookstore.Spec.HostPort)),
+					NodePort:   30007,
+				},
+			},
+		},
+	}
+
 }
