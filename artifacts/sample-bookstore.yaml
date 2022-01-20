@@ -3,7 +3,6 @@ kind: Bookstore
 metadata:
   name: bookstorecrd-sample
 spec:
-  # TODO(user): Add fields here
   deploymentName: bookstore-deployment
   replicaCount: 5
   serviceName: bookstore-service

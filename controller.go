@@ -151,7 +151,7 @@ func (c *Controller) processNextWorkItem() bool {
 		if err := c.syncHandler(key); err != nil {
 			// could not reconcile
 			c.workqueue.AddRateLimited(key)
-			return fmt.Errorf("error syncing '#{key}', #{err.Error()}, requeueing")
+			return fmt.Errorf("error syncing '%v', %v, requeueing", key, err.Error())
 		}
 		c.workqueue.Forget(obj)
 		klog.Info("Reconciliation Successful")

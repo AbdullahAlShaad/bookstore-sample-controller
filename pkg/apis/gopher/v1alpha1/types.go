@@ -49,18 +49,19 @@ type BookstoreStatus struct {
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Bookstore is the Schema for the bookstorecrds API
+// Bookstore is the Schema for the bookstores API
 type Bookstore struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   BookstoreSpec   `json:"spec"`
+	Spec BookstoreSpec `json:"spec"`
+	// +optional
 	Status BookstoreStatus `json:"status,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// BookstoreList contains a list of BookstoreCRD
+// BookstoreList contains a list of Bookstore
 type BookstoreList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
