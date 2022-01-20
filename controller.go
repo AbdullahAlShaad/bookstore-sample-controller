@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2"
 	"time"
 
+	samplev1alpha1 "github.com/Shaad7/bookstore-sample-controller/pkg/apis/gopher/v1alpha1"
 	clientset "github.com/Shaad7/bookstore-sample-controller/pkg/generated/clientset/versioned"
 	samplescheme "github.com/Shaad7/bookstore-sample-controller/pkg/generated/clientset/versioned/scheme"
 	informers "github.com/Shaad7/bookstore-sample-controller/pkg/generated/informers/externalversions/gopher/v1alpha1"
@@ -21,7 +26,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/klog/v2"
 )
 
 const controllerAgentName = "bookstore-controller"
@@ -150,7 +154,7 @@ func (c *Controller) processNextWorkItem() bool {
 			return fmt.Errorf("error syncing '#{key}', #{err.Error()}, requeueing")
 		}
 		c.workqueue.Forget(obj)
-		klog.Info("Reconcilation Successful")
+		klog.Info("Reconciliation Successful")
 		return nil
 	}(obj)
 
@@ -164,12 +168,90 @@ func (c *Controller) processNextWorkItem() bool {
 
 func (c *Controller) syncHandler(key string) error {
 
+	namespace, name, err := cache.SplitMetaNamespaceKey(key)
+	if err != nil {
+		utilruntime.HandleError(fmt.Errorf("Invalid key %s", key))
+		return nil
+	}
+	bookstore, err := c.bookstoreLister.Bookstores(namespace).Get(name)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			utilruntime.HandleError(fmt.Errorf("Resource '%s' not found in workqueue", key))
+			return nil
+		}
+		return err
+	}
+	deploymentName := bookstore.Spec.DeploymentName
+	if deploymentName == "" {
+		utilruntime.HandleError(fmt.Errorf("Deployment name is not specified for %s", key))
+		return nil
+	}
+	deployement, err := c.deploymentsLister.Deployments(bookstore.Namespace).Get(deploymentName)
+
+	if errors.IsNotFound(err) {
+		deployement, err = c.kubeclientset.AppsV1().Deployments(bookstore.Namespace).Create(context.TODO(), newDeployment(bookstore), metav1.CreateOptions{})
+	}
+	if err != nil {
+		return err
+	}
+
+	if !metav1.IsControlledBy(deployement, bookstore) {
+		msg := fmt.Sprintf(MessageResourceExists, deployement.Name)
+		c.recorder.Event(bookstore, corev1.EventTypeWarning, ErrResourceExists, msg)
+		return fmt.Errorf("%s", msg)
+	}
+
+	if bookstore.Spec.ReplicaCount != nil && *bookstore.Spec.ReplicaCount != *deployement.Spec.Replicas {
+		klog.V(4).Infof("name : %s , Bookstore replicas : %d, deployment replicas : %d", name, *bookstore.Spec.ReplicaCount, *deployement.Spec.Replicas)
+		deployement, err = c.kubeclientset.AppsV1().Deployments(bookstore.Namespace).Update(context.TODO(), newDeployment(bookstore), metav1.UpdateOptions{})
+	}
+
+	if err != nil {
+		return err
+	}
+
+	err = c.updateBookstoreStatus(bookstore, deployement)
+	if err != nil {
+		return err
+	}
+
+	c.recorder.Event(bookstore, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 	return nil
 }
 
 func (c *Controller) handleObject(obj interface{}) {
+	var object metav1.Object
+	var ok bool
+	if object, ok = obj.(metav1.Object); !ok {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			utilruntime.HandleError(fmt.Errorf("error decoding object, invalid type"))
+			return
+		}
+		object, ok = tombstone.Obj.(metav1.Object)
+		if !ok {
+			utilruntime.HandleError(fmt.Errorf("error decoding object tombstone, invalid type"))
+			return
+		}
+		klog.V(4).Infof("Recovered deleted object '%s' from tombstone")
+	}
+	klog.V(4).Infof("Processing object: %s", object.GetName())
+	if ownerRef := metav1.GetControllerOf(object); ownerRef != nil {
+		if ownerRef.Kind != "Bookstore" {
+			return
+		}
+		bookstore, err := c.bookstoreLister.Bookstores(object.GetNamespace()).Get(ownerRef.Name)
 
+		if err != nil {
+			klog.V(4).Infof("ignoring orphan object '%s' of bookstore '%s' ", object.GetSelfLink(), ownerRef.Name)
+			return
+		}
+
+		c.enqueueBookstore(bookstore)
+		return
+	}
 }
+
 func (c *Controller) enqueueBookstore(obj interface{}) {
 	var key string
 	var err error
@@ -178,4 +260,46 @@ func (c *Controller) enqueueBookstore(obj interface{}) {
 		return
 	}
 	c.workqueue.Add(key)
+}
+
+func (c *Controller) updateBookstoreStatus(bookstore *samplev1alpha1.Bookstore, deployment *appsv1.Deployment) error {
+	bookstoreCopy := bookstore.DeepCopy()
+	bookstoreCopy.Status.AvailableReplicas = deployment.Status.AvailableReplicas
+	_, err := c.sampleclientset.GopherV1alpha1().Bookstores(bookstore.Namespace).UpdateStatus(context.TODO(), bookstoreCopy, metav1.UpdateOptions{})
+	return err
+}
+
+func newDeployment(bookstore *samplev1alpha1.Bookstore) *appsv1.Deployment {
+	labels := map[string]string{
+		"app":        "bookstore-api-server",
+		"controller": bookstore.Name,
+	}
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      bookstore.Spec.DeploymentName,
+			Namespace: bookstore.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(bookstore, samplev1alpha1.SchemeGroupVersion.WithKind("Bookstore")),
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: bookstore.Spec.ReplicaCount,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "bookstore-api-server",
+							Image: "shaad7/bookstore-api-server:latest",
+						},
+					},
+				},
+			},
+		},
+	}
 }

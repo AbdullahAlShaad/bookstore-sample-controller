@@ -26,7 +26,7 @@ type BookstoreSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	DeploymentName string      `json:"deploymentName"`
-	ReplicaCount   int32       `json:"replicaCount"`
+	ReplicaCount   *int32      `json:"replicaCount"`
 	ServiceName    string      `json:"serviceName"`
 	ServiceType    ServiceType `json:"serviceType"`
 }
