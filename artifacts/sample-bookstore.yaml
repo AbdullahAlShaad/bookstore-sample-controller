@@ -3,7 +3,6 @@ kind: Bookstore
 metadata:
   name: bookstore-sample
 spec:
-  deploymentName: bookstore-deployment
+  name: bookstore
   replicaCount: 5
-  serviceName: bookstore-service
-  serviceType:  NodePort
+  hostPort: 8080

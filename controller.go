@@ -181,7 +181,7 @@ func (c *Controller) syncHandler(key string) error {
 		}
 		return err
 	}
-	deploymentName := bookstore.Spec.DeploymentName
+	deploymentName := bookstore.Spec.Name
 	if deploymentName == "" {
 		utilruntime.HandleError(fmt.Errorf("Deployment name is not specified for %s", key))
 		return nil
@@ -277,7 +277,7 @@ func newDeployment(bookstore *samplev1alpha1.Bookstore) *appsv1.Deployment {
 	}
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      bookstore.Spec.DeploymentName,
+			Name:      bookstore.Spec.Name,
 			Namespace: bookstore.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(bookstore, samplev1alpha1.SchemeGroupVersion.WithKind("Bookstore")),

@@ -22,27 +22,13 @@ import (
 
 // BookstoreSpec defines the desired state of BookstoreCRD
 type BookstoreSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	DeploymentName string      `json:"deploymentName"`
-	ReplicaCount   *int32      `json:"replicaCount"`
-	ServiceName    string      `json:"serviceName"`
-	ServiceType    ServiceType `json:"serviceType"`
+	Name         string `json:"name"`
+	ReplicaCount *int32 `json:"replicaCount"`
+	HostPort     int32  `json:"hostPort"`
 }
-
-type ServiceType string
-
-const (
-	NodePort     ServiceType = "NodePort"
-	ClusterIP    ServiceType = "ClusterIP"
-	LoadBalancer ServiceType = "LoadBalancer"
-)
 
 // BookstoreStatus defines the observed state of BookstoreCRD
 type BookstoreStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 	AvailableReplicas int32 `json:"availableReplicas"`
 }
 

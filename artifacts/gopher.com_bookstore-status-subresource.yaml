@@ -35,28 +35,23 @@ spec:
             spec:
               description: BookstoreSpec defines the desired state of BookstoreCRD
               properties:
-                deploymentName:
+                hostPort:
+                  format: int32
+                  type: integer
+                name:
                   type: string
                 replicaCount:
                   format: int32
                   type: integer
-                serviceName:
-                  type: string
-                serviceType:
-                  type: string
               required:
-                - deploymentName
+                - hostPort
+                - name
                 - replicaCount
-                - serviceName
-                - serviceType
               type: object
             status:
               description: BookstoreStatus defines the observed state of BookstoreCRD
               properties:
                 availableReplicas:
-                  description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
-                  of cluster Important: Run "make" to regenerate code after modifying
-                  this file'
                   format: int32
                   type: integer
               required:
@@ -69,7 +64,6 @@ spec:
       storage: true
       subresources:
         status: {}
-
 status:
   acceptedNames:
     kind: ""
