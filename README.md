@@ -9,11 +9,11 @@ request on host port 30000.
 
 Clone repo and move to directory
 ```shell
-https://github.com/Shaad7/bookstore-sample-controller
+git clone https://github.com/Shaad7/bookstore-sample-controller
 cd bookstore-sample-controller
 ```
 
-Create a `kind` cluster 
+Create a cluster using  [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
 ```shell
 kind create cluster --config=clusterconfig.yaml 
 ```
